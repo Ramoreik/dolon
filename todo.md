@@ -12,3 +12,9 @@
 ### Add an Environment system
 
 ### Have basic commands for the user
+
+
+### Interceipt keyboard keys
+
+
+### Match them when received to implement ctrl+c 
