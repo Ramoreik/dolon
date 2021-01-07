@@ -3,6 +3,15 @@ use std::error::Error;
 use std::process::{Command, Output};
 
 static USAGE: &str = "im the help message yo.";
+static SHELL: [&str; 2] = shell_program();
+
+const fn shell_program() -> [&'static str; 2]{
+    if cfg!(target_os = "windows"){
+        ["C:\\Windows\\System32\\cmd.exe","/C"]
+    }else{
+        ["sh", "-c"]
+    }
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let username: String = input::<String>().msg("Enter your username: ").get();
@@ -10,7 +19,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     shell();
     Ok(())
 }
-
 fn shell() {
     loop {
         let cmd: String = input::<String>().msg("[?] Enter your command: ").get();
@@ -21,28 +29,36 @@ fn shell() {
                 std::process::exit(0);
             }
             _ => {
-                let output: String = String::from_utf8(
-                                    command(cmd.to_lowercase()).stdout).unwrap();
-                println!("=========================");
-                println!("{}", output);
+                display(command(cmd))
             },
         }
     }
 }
 
 fn command(user_cmd: String) -> Output {
-    let output = if cfg!(target_os = "windows") {
-        Command::new("C:\\Windows\\System32\\cmd.exe")
-                .arg("/C")
-                .arg(user_cmd)
-                .output()
-                .expect("failed to execute process")
-    } else {
-        Command::new("sh")
-                .arg("-c")
-                .arg(user_cmd)
-                .output()
-                .expect("failed to execute process")
+    Command::new(SHELL[0])
+            .arg(SHELL[1])
+            .arg(user_cmd)
+            .output()
+            .expect("failed to execute process")
+}
+
+fn display(output: Output) {
+    let stdout: String = match String::from_utf8(output.stdout){
+        Ok(stdout) => stdout,
+        Err(_) => {
+            eprintln!("[!] Trouble parsing stdout, exiting.");
+            std::process::exit(1);
+        }
     };
-    output
+    let stderr: String = match String::from_utf8(output.stderr){
+        Ok(stderr) => stderr,
+        Err(_)=> {
+            eprintln!("[!] Trouble parsing stderr, exiting");
+            std::process::exit(1);
+        }
+    };
+    println!("============================");
+    println!("{}", stdout);
+    println!("{}", stderr);
 }
