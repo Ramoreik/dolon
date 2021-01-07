@@ -1,6 +1,8 @@
 use std::error::Error;
 use read_input::prelude::*;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Child};
+use std::io::{Write, Read};
+use std::thread;
 
 static PROMPT: &str = "d0l0n💀: ";
 static SHELL: [&str; 2] = shell_program();
@@ -59,6 +61,17 @@ impl Shell {
                 .output()
                 .expect("failed to execute process")
         )
+    }
+
+    pub fn interactive_session(&self, cmd: String) -> Result<(), Box<dyn Error>> {
+        let handle: Child = Command::new(&self.binary)
+            .spawn()
+            .expect("failed to execute process");
+        let ls = "ls - al".as_bytes();
+        handle.stdin.unwrap().write_all(ls)?;
+        let mut stdout: [u8];
+        handle.stdout.unwrap().read(&mut stdout);
+        Ok(())
     }
 
     pub fn out(&self, output: Output) -> Result<(), Box<dyn Error>>{
