@@ -67,26 +67,40 @@ impl Shell {
         )
     }
 
+    // DEVNOTE: Does not quite work, it executes ls one time but then stops working.
+    // I'm pretty sure that it is caused by take, which makes the process' stdin none after its use.
+    // Since im looping the next iterating is then always empty.
+    // I have to read on BufReaders but i'm too tired.
+    // https://stackoverflow.com/questions/21615188/how-to-send-input-to-a-program-through-stdin-in-rust
+    // https://doc.rust-lang.org/std/process/struct.Stdio.html
+
     pub fn interactive_session(&self) -> Result<(), Box<dyn Error>> {
+        // Channels to send commands to thread
         let (sti_sender, sti_receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
+
+        // Channels to receive output from thread
         let (sto_sender, sto_receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
-        let hndl = std::thread::spawn(move || {
+
+        // launch shell thread
+        std::thread::spawn(move || {
+            // launch bash in interactive (default)
             let mut handle: Child = Command::new("bash")
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .spawn()
                 .expect("failed to execute process");
-                let mut stdin = handle.stdin.unwrap();
-                let mut w_stdin = BufWriter::new(&mut stdin);
+
+            // Loop to listen for commands.
+            // It will send the commands to shell and catch the output.
             loop {
-                println!("[!] Shell thread started.");
-                // if stdin is Some, write command?
+                if let Some(mut stdin) = handle.stdin.take(){
                     if let Ok(cmd) = sti_receiver.recv(){
                         println!("[!] command received.");
-                        w_stdin.write_all(&cmd).unwrap();
+                        stdin.write_all(&cmd).unwrap();
                     }
-                // get stdout, create buf, read into buf
+                }
+
                 if let Some(mut stdout) = handle.stdout.take(){
                     let mut buf: Vec<u8> = Vec::new();
                     stdout.read_to_end(&mut buf).unwrap();
@@ -96,11 +110,13 @@ impl Shell {
                 thread::sleep(std::time::Duration::from_millis(200));
             }
         });
+
+        // Thread that continuously asks user for his input,
+        // This input is given as commands to the interactive shell using above sti channels.
         loop {
             println!("[!] Handler thread started.");
-            // let cmd: String = input::<String>().msg("$").get();
-            // sti_sender.send(cmd.into_bytes())?;
-            sti_sender.send("ls".to_owned().into_bytes())?;
+            let cmd: String = input::<String>().msg("$ ").get();
+            sti_sender.send(cmd.into_bytes())?;
             println!("[!] command sent.");
             if let Ok(out) = sto_receiver.recv() {
                 println!("{}", String::from_utf8(out).unwrap());

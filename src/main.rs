@@ -7,7 +7,7 @@ use shell::Shell;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let shell: Shell = Shell::new();
-    shell.init();
-    // shell.interactive_session()?;
+    // shell.init();
+    shell.interactive_session()?;
     Ok(())
 }
