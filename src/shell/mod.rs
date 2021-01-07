@@ -1,7 +1,9 @@
 use std::error::Error;
 use read_input::prelude::*;
-use std::process::{Command, Output, Child};
-use std::io::{Write, Read};
+use std::process::{Command, Output, Child, Stdio};
+use std::io::{Write, Read, BufReader, BufWriter, BufRead};
+use std::sync::mpsc;
+use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
 
 static PROMPT: &str = "d0l0n💀: ";
@@ -21,6 +23,7 @@ pub struct Shell{
     option: String,
     last: Option<String>,
     cmd: Option<String>,
+    interactive: Option<Child>,
 }
 
 impl Shell {
@@ -29,7 +32,8 @@ impl Shell {
             binary: SHELL[0].to_owned(),
             option: SHELL[1].to_owned(),
             last: None,
-            cmd: None
+            cmd: None,
+            interactive: None
         }
     }
 
@@ -63,16 +67,48 @@ impl Shell {
         )
     }
 
-    pub fn interactive_session(&self, cmd: String) -> Result<(), Box<dyn Error>> {
-        let handle: Child = Command::new(&self.binary)
-            .spawn()
-            .expect("failed to execute process");
-        let ls = "ls - al".as_bytes();
-        handle.stdin.unwrap().write_all(ls)?;
-        let mut stdout: [u8];
-        handle.stdout.unwrap().read(&mut stdout);
-        Ok(())
+    pub fn interactive_session(&self) -> Result<(), Box<dyn Error>> {
+        let (sti_sender, sti_receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
+        let (sto_sender, sto_receiver): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
+        let hndl = std::thread::spawn(move || {
+            let mut handle: Child = Command::new("bash")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("failed to execute process");
+                let mut stdin = handle.stdin.unwrap();
+                let mut w_stdin = BufWriter::new(&mut stdin);
+            loop {
+                println!("[!] Shell thread started.");
+                // if stdin is Some, write command?
+                    if let Ok(cmd) = sti_receiver.recv(){
+                        println!("[!] command received.");
+                        w_stdin.write_all(&cmd).unwrap();
+                    }
+                // get stdout, create buf, read into buf
+                if let Some(mut stdout) = handle.stdout.take(){
+                    let mut buf: Vec<u8> = Vec::new();
+                    stdout.read_to_end(&mut buf).unwrap();
+                    println!("[!] Sending output.");
+                    sto_sender.send(buf).unwrap();
+                }
+                thread::sleep(std::time::Duration::from_millis(200));
+            }
+        });
+        loop {
+            println!("[!] Handler thread started.");
+            // let cmd: String = input::<String>().msg("$").get();
+            // sti_sender.send(cmd.into_bytes())?;
+            sti_sender.send("ls".to_owned().into_bytes())?;
+            println!("[!] command sent.");
+            if let Ok(out) = sto_receiver.recv() {
+                println!("{}", String::from_utf8(out).unwrap());
+            }
+        }
+        // Ok(())
     }
+
 
     pub fn out(&self, output: Output) -> Result<(), Box<dyn Error>>{
         match output {
